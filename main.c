@@ -9,7 +9,7 @@
 #define NON_PROMISCUOUS 	0x0
 #define ETH_HEADER_SIZE		0xE
 #define TIME_OUT		0xFF
-#define MAX_IP_PACKET_SIZE 	0xFFFFe
+#define MAX_IP_PACKET_SIZE 	0xFFFF
 #define PROTOCOL_TCP		0x6
 #define ETH_IPV4		0x800
 
