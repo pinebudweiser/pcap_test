@@ -34,6 +34,15 @@ void print_port(uint16_t port1, uint16_t port2)
 	printf(" src port : %d\n", port1);
 	printf(" dst port : %d\n", port2);
 }
+void print_data(uint8_t* data)
+{
+	printf(" Data : ");
+	for (int i = 0; i < 16; i++)
+	{
+		printf("%02x ", data[i]);
+	}
+	printf("\n");
+}
 
 int main(int argc, char** argv)
 {
@@ -65,10 +74,10 @@ int main(int argc, char** argv)
 
 	while (1)
 	{
+		uint8_t dataBuf[16] = { 0, };
 		uint32_t offset = 0;
-		char dataBuf[16] = { 0, };
 
-		pcap_next_ex(pktDescriptor, &pktHeader, &pktData);
+		pcap_next_ex(pktDescriptor, &pktHeader, &pktData);		
 		memcpy(&ethHeader, &pktData[offset], ethHeaderSize);
 		if (ntohs(ethHeader.EType) == ETH_IPV4)
 		{
@@ -90,7 +99,7 @@ int main(int argc, char** argv)
 			if ( ntohs(ipHeader.TotalLength) != (offset - ETH_HEADER_SIZE) )	// IS Data NULL?
 			{
 				memcpy(dataBuf, &pktData[offset], 16);
-				printf(" DATA : %s\n", dataBuf);
+				print_data(dataBuf);
 			}
 			printf("--------------------------------------------\n");
 		}
