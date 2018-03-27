@@ -6,64 +6,41 @@
 #include <arpa/inet.h>
 #include "data.h"
 
-#define NON_PROMISCUOUS 	0x0
-#define ETH_HEADER_SIZE		0xE
+#define NON_PROMISCUOUS 	0
+#define ETH_HEADER_SIZE		14
 #define TIME_OUT		0xFF
 #define MAX_IP_PACKET_SIZE 	0xFFFF
 #define PROTOCOL_TCP		0x6
-#define ETH_IPV4		0x800
+#define ETH_IPV4		0x0800
 
-void print_mac(uint8_t* mac1, uint8_t* mac2)
-{
-	printf(" src mac : %02x:%02x:%02x:%02x:%02x:%02x\n", mac1[0], mac1[1], mac1[2], mac1[3], mac1[4], mac1[5]);
-	printf(" dst mac : %02x:%02x:%02x:%02x:%02x:%02x\n", mac2[0], mac2[1], mac2[2], mac2[3], mac2[4], mac2[5]);
-}
-void print_ip(uint32_t* ip1, uint32_t* ip2)
-{
-	uint8_t* byteIP1 = (uint8_t*)ip1;
-	uint8_t* byteIP2 = (uint8_t*)ip2;
-
-	printf(" src ip : %d.%d.%d.%d\n", byteIP1[0], byteIP1[1], byteIP1[2], byteIP1[3]); 
-	printf(" dst ip : %d.%d.%d.%d\n", byteIP2[0], byteIP2[1], byteIP2[2], byteIP2[3]);
-}
-void print_port(uint16_t port1, uint16_t port2)
-{
-	port1 = ntohs(port1);
-	port2 = ntohs(port2);
-
-	printf(" src port : %d\n", port1);
-	printf(" dst port : %d\n", port2);
-}
-void print_data(uint8_t* data)
-{
-	printf(" Data : ");
-	for (int i = 0; i < 16; i++)
-	{
-		printf("%02x ", data[i]);
-	}
-	printf("\n");
-}
+/* prototype */
+void print_mac(uint8_t*);
+void print_ip(uint8_t*);
+void print_port(uint16_t*);
+void print_data(uint8_t*, uint8_t);
 
 int main(int argc, char** argv)
 {
-	ETH ethHeader;
-	IP ipHeader;
-	TCP tcpHeader;
-	struct pcap_pkthdr* pktHeader = 0;
+	ETH* ethHeader;
+	IP* ipHeader;
+	TCP* tcpHeader;
+	uint8_t dataBuf[16] = { 0, };
+	const uint8_t ethHeaderSize = sizeof(ETH);
+	uint8_t ipHeaderSize = sizeof(IP);
+	uint8_t tcpHeaderSize = sizeof(TCP);
 	char errBuf[PCAP_ERRBUF_SIZE] = { 0, };
-	char* interface = *(argv+1);
-	const unsigned char* pktData = 0;
-	pcap_t* pktDescriptor = 0;
-	const uint8_t ethHeaderSize = sizeof(ethHeader);
-	uint8_t ipHeaderSize = sizeof(ipHeader);
-	uint8_t tcpHeaderSize = sizeof(tcpHeader);
+	const unsigned char* pktData;
+	char* interface = 0;
+	struct pcap_pkthdr* pktHeader;
+	pcap_t* pktDescriptor;
 
 	if (argc != 2)
 	{
 		printf(" [err] Please input only one argument\n");
 		return 1; 
 	}
-	
+
+	interface = *(argv+1);
 	pktDescriptor = pcap_open_live(interface, MAX_IP_PACKET_SIZE, NON_PROMISCUOUS, TIME_OUT, errBuf);
 
 	if (!pktDescriptor)
@@ -74,35 +51,68 @@ int main(int argc, char** argv)
 
 	while (1)
 	{
-		uint8_t dataBuf[16] = { 0, };
 		uint32_t offset = 0;
+		uint32_t dataSize = 0;	
 
-		pcap_next_ex(pktDescriptor, &pktHeader, &pktData);		
-		memcpy(&ethHeader, &pktData[offset], ethHeaderSize);
-		if (ntohs(ethHeader.EType) == ETH_IPV4)
+		pcap_next_ex(pktDescriptor, &pktHeader, &pktData);	
+		ethHeader = (ETH*)(pktData);
+		if (ntohs(ethHeader->EType) == ETH_IPV4)
 		{
 			offset += ethHeaderSize;
-			memcpy(&ipHeader, &pktData[offset], ipHeaderSize);
-			ipHeaderSize += (((ipHeader.VERIHL&0x0F)<<2) - BASIC_IP_HEADER_LENGTH); // Add optional Header
-			offset += ipHeaderSize;
+			ipHeader = (IP*)(pktData+offset);
+			ipHeaderSize = ((uint8_t)(ipHeader->IHL)<<2); // Add optional Header
 		}
-		if (ipHeader.ProtocolID == PROTOCOL_TCP)	
+		if (ipHeader->ProtocolID == PROTOCOL_TCP)	
 		{
-			memcpy(&tcpHeader, &pktData[offset], tcpHeaderSize);	
-			offset += ((tcpHeader.HeaderLength>>4)<<2);	// Add TCP Header Length
+			offset += ipHeaderSize;
+			tcpHeader = (TCP*)(pktData+offset);
+			tcpHeaderSize = ((uint8_t)(tcpHeader->HeaderLength)<<2);	// Add TCP Header Length
 
 			printf("--------------------------------------------\n");
-			print_mac(ethHeader.SrcMAC, ethHeader.DstMAC);
-			print_ip(&ipHeader.SrcIP, &ipHeader.DstIP);
-			print_port(tcpHeader.SrcPort, tcpHeader.DstPort);
+			print_mac(ethHeader->SrcMAC);
+			print_mac(ethHeader->DstMAC);
+			print_ip(&(ipHeader->SrcIP));
+			print_ip(&(ipHeader->DstIP));
+			print_port(&(tcpHeader->SrcPort));
+			print_port(&(tcpHeader->DstPort));
 
-			if ( ntohs(ipHeader.TotalLength) != (offset - ETH_HEADER_SIZE) )	// IS Data NULL?
+			offset += tcpHeaderSize;
+			dataSize = (ntohs(ipHeader->TotalLength) - (offset-ETH_HEADER_SIZE));
+			if (dataSize)// IS Data NULL?
 			{
-				memcpy(dataBuf, &pktData[offset], 16);
-				print_data(dataBuf);
+				print_data(&pktData+offset, dataSize);
 			}
 			printf("--------------------------------------------\n");
 		}
 	}
 	return 0;
+}
+
+void print_mac(uint8_t* mac)
+{
+	printf(" mac : %02x:%02x:%02x:%02x:%02x:%02x\n", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+}
+
+void print_ip(uint8_t* ip)
+{
+	printf(" ip : %d.%d.%d.%d\n", ip[0], ip[1], ip[2], ip[3]); 
+}
+
+void print_port(uint16_t* port)
+{
+	printf(" port : %d\n", ntohs(*port));
+}
+
+void print_data(uint8_t* data, uint8_t dataSize)
+{
+	if (dataSize > 16)
+	{
+		dataSize = 16;	
+	}
+	printf(" Data : ");
+	for (int i = 0; i < dataSize; i++)
+	{
+		printf("%02x ", data[i]);
+	}
+	printf("\n");
 }
