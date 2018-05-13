@@ -7,8 +7,8 @@ typedef struct Ethernet{
 	uint16_t EType;
 }ETH;	// DIX 2.0, 14Byte
 typedef struct InternetProtocol{
-	uint8_t VER:4;
 	uint8_t IHL:4;
+	uint8_t VER:4;
 	uint8_t UnUse1;
 	uint16_t TotalLength;
 	uint32_t UnUse2;
